@@ -4,6 +4,8 @@ RunPod load-balanced Serverless template for native Ollama chat requests with `a
 
 The container exposes Ollama directly on `PORT=11434` and runs a tiny standard-library Python health server on `PORT_HEALTH=8000` for RunPod's `/ping` check.
 
+The Dockerfile clears the upstream Ollama image entrypoint so `/app/start.sh` can launch both the health server and `ollama serve`.
+
 ## HTTP Endpoints
 
 - `GET /ping`: RunPod health check served by the health server on `PORT_HEALTH`.

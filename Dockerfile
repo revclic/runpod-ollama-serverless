@@ -25,4 +25,5 @@ RUN chmod +x /app/start.sh
 
 EXPOSE 11434 8000
 
+ENTRYPOINT []
 CMD ["/app/start.sh"]
