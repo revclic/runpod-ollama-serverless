@@ -1,14 +1,14 @@
 # RunPod Load-Balanced Ollama Aya Expanse
 
-RunPod load-balanced Serverless template for native Ollama-compatible chat requests with `aya-expanse:8b` pre-pulled into the Docker image.
+RunPod load-balanced Serverless template for native Ollama chat requests with `aya-expanse:8b` pre-pulled into the Docker image.
 
-The container starts Ollama privately on `127.0.0.1:11434`, then starts a FastAPI HTTP server on the port RunPod provides in `PORT`. RunPod routes external traffic to the FastAPI app, not directly to Ollama.
+The container exposes Ollama directly on `PORT=11434` and runs a tiny standard-library Python health server on `PORT_HEALTH=8000` for RunPod's `/ping` check.
 
 ## HTTP Endpoints
 
-- `GET /ping`: fast process health check expected by RunPod load balancing.
-- `GET /health`: deeper health check that confirms the app can reach Ollama.
-- `POST /api/chat`: Ollama-compatible chat endpoint.
+- `GET /ping`: RunPod health check served by the health server on `PORT_HEALTH`.
+- `POST /api/chat`: native Ollama chat endpoint served directly by Ollama on `PORT`.
+- Other Ollama endpoints, such as `GET /api/tags`, are also exposed through RunPod.
 
 ## Request Format
 
@@ -28,7 +28,7 @@ Existing Ollama clients can point their base URL at this RunPod endpoint and kee
 }
 ```
 
-If `model` is omitted, the service defaults it to `aya-expanse:8b`. The service always forces `stream: false`.
+Because traffic goes directly to Ollama, callers must provide the normal Ollama payload fields they need, including `model` and `stream`.
 
 ## Response Format
 
@@ -47,17 +47,6 @@ If `model` is omitted, the service defaults it to `aya-expanse:8b`. The service 
 }
 ```
 
-Invalid inputs return a structured error:
-
-```json
-{
-  "error": {
-    "message": "messages must be a non-empty array.",
-    "status_code": 400
-  }
-}
-```
-
 ## Test Your RunPod URL
 
 Set your RunPod API key locally:
@@ -66,17 +55,24 @@ Set your RunPod API key locally:
 export RUNPOD_API_KEY="YOUR_RUNPOD_API_KEY"
 ```
 
-Health check:
+RunPod health check configuration:
 
 ```bash
-curl https://YOUR_ENDPOINT_ID.api.runpod.ai/ping \
+curl -i https://YOUR_ENDPOINT_ID.api.runpod.ai/ping \
+  -H "Authorization: Bearer $RUNPOD_API_KEY"
+```
+
+When `PORT` and `PORT_HEALTH` are different, RunPod uses `/ping` for internal worker health checks on `PORT_HEALTH`. Public requests are routed to Ollama on `PORT`, so use a native Ollama endpoint for public smoke testing:
+
+```bash
+curl -i https://YOUR_ENDPOINT_ID.api.runpod.ai/api/tags \
   -H "Authorization: Bearer $RUNPOD_API_KEY"
 ```
 
 Chat request:
 
 ```bash
-curl --request POST \
+curl -i --request POST \
   --url https://YOUR_ENDPOINT_ID.api.runpod.ai/api/chat \
   -H "Authorization: Bearer $RUNPOD_API_KEY" \
   -H "Content-Type: application/json" \
@@ -87,9 +83,13 @@ curl --request POST \
     "messages": [
       {
         "role": "user",
-        "content": "Write a short greeting in Spanish."
+        "content": "Say only: ok"
       }
-    ]
+    ],
+    "options": {
+      "temperature": 0,
+      "num_predict": 8
+    }
   }'
 ```
 
@@ -102,7 +102,7 @@ For an existing app that uses native Ollama URLs:
 ```bash
 OLLAMA_URL=https://YOUR_ENDPOINT_ID.api.runpod.ai
 OLLAMA_MODEL=aya-expanse:8b
-RUNPOD_API_KEY=YOUR_RUNPOD_API_KEY
+OLLAMA_API_KEY=YOUR_RUNPOD_API_KEY
 ```
 
 Your app must send the RunPod auth header:
@@ -113,32 +113,26 @@ Authorization: Bearer YOUR_RUNPOD_API_KEY
 
 ## Local Test
 
-Start Ollama locally:
+Start the container locally and map both ports:
 
 ```bash
-ollama serve
+docker run --rm --gpus all \
+  -p 11434:11434 \
+  -p 8000:8000 \
+  runpod-ollama-aya-expanse
 ```
 
-In another terminal, pull the model:
+Health check:
 
 ```bash
-ollama pull aya-expanse:8b
+curl -i http://127.0.0.1:8000/ping
 ```
 
-Then install dependencies and run the HTTP app:
+Chat request:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-PORT=8000 uvicorn handler:app --host 0.0.0.0 --port 8000
-```
-
-Test locally:
-
-```bash
-curl --request POST \
-  --url http://127.0.0.1:8000/api/chat \
+curl -i --request POST \
+  --url http://127.0.0.1:11434/api/chat \
   -H "Content-Type: application/json" \
   -d @test_input.json
 ```
@@ -151,16 +145,13 @@ Build the image for RunPod:
 docker build --platform linux/amd64 -t runpod-ollama-aya-expanse .
 ```
 
-Run it locally with GPU access when available:
-
-```bash
-docker run --rm --gpus all -p 8000:8000 runpod-ollama-aya-expanse
-```
-
 For CPU-only smoke testing:
 
 ```bash
-docker run --rm -p 8000:8000 runpod-ollama-aya-expanse
+docker run --rm \
+  -p 11434:11434 \
+  -p 8000:8000 \
+  runpod-ollama-aya-expanse
 ```
 
 ## Push To A Registry
@@ -180,23 +171,21 @@ Use `YOUR_REGISTRY/YOUR_IMAGE:latest` as the container image when creating the R
 2. Create a RunPod Serverless endpoint with load balancing enabled.
 3. Select a GPU with enough VRAM for `aya-expanse:8b`.
 4. Set the container image to your pushed image.
-5. Configure the HTTP port to match the `PORT` environment variable. The image defaults to `8000`, but RunPod may inject its own value.
-6. Configure the health port to match `PORT_HEALTH`. The image defaults `PORT_HEALTH` to the same value as `PORT`.
-7. Send a request to `/ping`, then `/api/chat`.
-
-The HTTP server starts immediately so RunPod can reach `/ping` while Ollama is still warming up. `/ping` is intentionally lightweight; use `/health` when you want to confirm Ollama is reachable inside the container.
+5. Configure the HTTP port as `11434`.
+6. Configure the health port as `8000`.
+7. Configure the health path as `/ping`.
+8. Confirm the worker becomes healthy, then send a request to `/api/tags` and `/api/chat`.
 
 ## Environment Variables
 
-- `OLLAMA_MODEL`: default model used when requests omit `model`, defaults to `aya-expanse:8b`.
-- `OLLAMA_HOST`: Ollama host and port, defaults to `127.0.0.1:11434`.
-- `OLLAMA_REQUEST_TIMEOUT_SECONDS`: request timeout, defaults to `600`.
-- `PORT`: main HTTP port expected by RunPod load balancing, defaults to `8000`.
-- `PORT_HEALTH`: health HTTP port expected by RunPod load balancing, defaults to `PORT`.
+- `OLLAMA_HOST`: Ollama bind host and port, defaults to `0.0.0.0:11434`.
+- `OLLAMA_MODEL`: model pre-pulled into the image, defaults to `aya-expanse:8b`.
+- `PORT`: main Ollama HTTP port expected by RunPod load balancing, defaults to `11434`.
+- `PORT_HEALTH`: health HTTP port expected by RunPod load balancing, defaults to `8000`.
 
 ## Endpoint Protection
 
-RunPod protects load-balanced endpoint calls with your RunPod API key. The local Ollama server itself is not exposed publicly; it listens inside the container and is called by `handler.py`.
+RunPod protects load-balanced endpoint calls with your RunPod API key. This image exposes Ollama's native HTTP API through RunPod, so any reachable Ollama endpoint is available to callers with that key.
 
 ## License Notice
 
