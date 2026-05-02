@@ -1,14 +1,18 @@
 import os
 from typing import Any
 
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 import requests
-import runpod
 
 
 MODEL = os.getenv("OLLAMA_MODEL", "aya-expanse:8b")
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "127.0.0.1:11434")
 OLLAMA_CHAT_URL = f"http://{OLLAMA_HOST}/api/chat"
 REQUEST_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_REQUEST_TIMEOUT_SECONDS", "600"))
+
+app = FastAPI(title="RunPod Ollama Aya Expanse")
+health_app = FastAPI(title="RunPod Ollama Aya Expanse Health")
 
 
 def error_response(message: str, status_code: int = 400) -> dict[str, Any]:
@@ -73,14 +77,57 @@ def compact_ollama_response(response: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def handler(job: dict[str, Any]) -> dict[str, Any]:
-    job_input = job.get("input", {})
+def normalize_input(payload: dict[str, Any]) -> dict[str, Any]:
+    job_input = payload.get("input")
+    if isinstance(job_input, dict):
+        return job_input
+
+    return payload
+
+
+def health_status() -> dict[str, Any]:
+    try:
+        response = requests.get(f"http://{OLLAMA_HOST}/api/tags", timeout=5)
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        return {
+            "status": "unhealthy",
+            "model": MODEL,
+            "ollama_host": OLLAMA_HOST,
+            "error": str(exc),
+        }
+
+    return {
+        "status": "healthy",
+        "model": MODEL,
+        "ollama_host": OLLAMA_HOST,
+    }
+
+
+@app.get("/ping")
+def ping() -> dict[str, Any]:
+    return health_status()
+
+
+@app.get("/health")
+def health() -> dict[str, Any]:
+    return health_status()
+
+
+@health_app.get("/ping")
+def health_ping() -> dict[str, Any]:
+    return health_status()
+
+
+@app.post("/chat")
+def chat(payload: dict[str, Any]) -> JSONResponse:
+    job_input = normalize_input(payload)
     if not isinstance(job_input, dict):
-        return error_response("Job input must be an object.")
+        return JSONResponse(error_response("Request body must be an object."), status_code=400)
 
     validation_error = validate_messages(job_input.get("messages"))
     if validation_error:
-        return error_response(validation_error)
+        return JSONResponse(error_response(validation_error), status_code=400)
 
     payload: dict[str, Any] = {
         "model": MODEL,
@@ -100,14 +147,11 @@ def handler(job: dict[str, Any]) -> dict[str, Any]:
         )
         response.raise_for_status()
     except requests.Timeout:
-        return error_response("Timed out waiting for Ollama.", 504)
+        return JSONResponse(error_response("Timed out waiting for Ollama.", 504), status_code=504)
     except requests.RequestException as exc:
-        return error_response(f"Ollama request failed: {exc}", 502)
+        return JSONResponse(error_response(f"Ollama request failed: {exc}", 502), status_code=502)
 
     try:
-        return compact_ollama_response(response.json())
+        return JSONResponse(compact_ollama_response(response.json()))
     except ValueError:
-        return error_response("Ollama returned a non-JSON response.", 502)
-
-
-runpod.serverless.start({"handler": handler})
+        return JSONResponse(error_response("Ollama returned a non-JSON response.", 502), status_code=502)

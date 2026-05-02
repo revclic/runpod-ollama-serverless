@@ -4,6 +4,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     OLLAMA_HOST=127.0.0.1:11434 \
     OLLAMA_MODEL=aya-expanse:8b \
     PATH="/opt/venv/bin:${PATH}" \
+    PORT=8000 \
+    PORT_HEALTH=8000 \
     PYTHONUNBUFFERED=1
 
 WORKDIR /app
@@ -25,5 +27,7 @@ RUN ollama serve > /tmp/ollama-build.log 2>&1 & \
 
 COPY handler.py start.sh test_input.json ./
 RUN chmod +x /app/start.sh
+
+EXPOSE 8000
 
 CMD ["/app/start.sh"]
