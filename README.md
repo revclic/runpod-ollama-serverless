@@ -9,7 +9,6 @@ The worker exposes a queue-style RunPod handler, sends non-streaming chat reques
 ```json
 {
   "input": {
-    "api_key": "optional-shared-secret",
     "messages": [
       {
         "role": "user",
@@ -26,7 +25,6 @@ The worker exposes a queue-style RunPod handler, sends non-streaming chat reques
 
 Supported `input` fields:
 
-- `api_key`: required only when `OLLAMA_API_KEY` is set on the worker.
 - `messages`: required non-empty chat message array.
 - `system`: optional system prompt prepended to `messages`.
 - `options`: optional Ollama generation options.
@@ -123,21 +121,17 @@ Use `YOUR_REGISTRY/YOUR_IMAGE:latest` as the container image when creating the R
 2. Create a new RunPod Serverless endpoint.
 3. Select a GPU with enough VRAM for `aya-expanse:8b`.
 4. Set the container image to your pushed image.
-5. Optionally set `OLLAMA_API_KEY` as an endpoint environment variable if you want a second shared-secret check inside the worker.
-6. Send a test job using the sample payload from `test_input.json`.
+5. Send a test job using the sample payload from `test_input.json`.
 
 ## Environment Variables
 
 - `OLLAMA_MODEL`: model passed to Ollama, defaults to `aya-expanse:8b`.
 - `OLLAMA_HOST`: Ollama host and port, defaults to `127.0.0.1:11434`.
-- `OLLAMA_API_KEY`: optional shared secret. When set, requests must include matching `input.api_key`.
 - `OLLAMA_REQUEST_TIMEOUT_SECONDS`: request timeout, defaults to `600`.
 
 ## Endpoint Protection
 
-RunPod already protects Serverless endpoint calls with your RunPod API key. In this template, `OLLAMA_API_KEY` adds an optional second check at the worker level.
-
-The local Ollama server itself is not exposed publicly; it listens inside the container and is called by `handler.py`. Because RunPod serverless jobs do not pass arbitrary HTTP headers into the handler, the shared secret is sent in the job input as `api_key`.
+RunPod protects Serverless endpoint calls with your RunPod API key. The local Ollama server itself is not exposed publicly; it listens inside the container and is called by `handler.py`.
 
 ## License Notice
 

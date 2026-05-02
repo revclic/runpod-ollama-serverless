@@ -8,7 +8,6 @@ import runpod
 MODEL = os.getenv("OLLAMA_MODEL", "aya-expanse:8b")
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "127.0.0.1:11434")
 OLLAMA_CHAT_URL = f"http://{OLLAMA_HOST}/api/chat"
-OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY")
 REQUEST_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_REQUEST_TIMEOUT_SECONDS", "600"))
 
 
@@ -78,9 +77,6 @@ def handler(job: dict[str, Any]) -> dict[str, Any]:
     job_input = job.get("input", {})
     if not isinstance(job_input, dict):
         return error_response("Job input must be an object.")
-
-    if OLLAMA_API_KEY and job_input.get("api_key") != OLLAMA_API_KEY:
-        return error_response("Invalid or missing API key.", 401)
 
     validation_error = validate_messages(job_input.get("messages"))
     if validation_error:
