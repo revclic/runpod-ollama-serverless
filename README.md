@@ -6,8 +6,8 @@ The container starts Ollama privately on `127.0.0.1:11434`, then starts a FastAP
 
 ## HTTP Endpoints
 
-- `GET /ping`: health check endpoint expected by RunPod load balancing.
-- `GET /health`: alias for `/ping`.
+- `GET /ping`: fast process health check expected by RunPod load balancing.
+- `GET /health`: deeper health check that confirms the app can reach Ollama.
 - `POST /api/chat`: Ollama-compatible chat endpoint.
 
 ## Request Format
@@ -183,6 +183,8 @@ Use `YOUR_REGISTRY/YOUR_IMAGE:latest` as the container image when creating the R
 5. Configure the HTTP port to match the `PORT` environment variable. The image defaults to `8000`, but RunPod may inject its own value.
 6. Configure the health port to match `PORT_HEALTH`. The image defaults `PORT_HEALTH` to the same value as `PORT`.
 7. Send a request to `/ping`, then `/api/chat`.
+
+The HTTP server starts immediately so RunPod can reach `/ping` while Ollama is still warming up. `/ping` is intentionally lightweight; use `/health` when you want to confirm Ollama is reachable inside the container.
 
 ## Environment Variables
 

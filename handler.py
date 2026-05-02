@@ -73,7 +73,10 @@ def health_status() -> dict[str, Any]:
 
 @app.get("/ping")
 def ping() -> dict[str, Any]:
-    return health_status()
+    return {
+        "status": "ok",
+        "model": MODEL,
+    }
 
 
 @app.get("/health")
@@ -83,7 +86,10 @@ def health() -> dict[str, Any]:
 
 @health_app.get("/ping")
 def health_ping() -> dict[str, Any]:
-    return health_status()
+    return {
+        "status": "ok",
+        "model": MODEL,
+    }
 
 
 @app.post("/api/chat")

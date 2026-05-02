@@ -5,21 +5,25 @@ export OLLAMA_HOST="${OLLAMA_HOST:-127.0.0.1:11434}"
 export PORT="${PORT:-8000}"
 export PORT_HEALTH="${PORT_HEALTH:-${PORT}}"
 
+echo "Starting Ollama on ${OLLAMA_HOST}..."
 ollama serve &
 OLLAMA_PID=$!
 
+HEALTH_PID=""
+
 cleanup() {
   kill "${OLLAMA_PID}" 2>/dev/null || true
+  if [[ -n "${HEALTH_PID}" ]]; then
+    kill "${HEALTH_PID}" 2>/dev/null || true
+  fi
 }
 trap cleanup EXIT
 
-until curl -fsS "http://${OLLAMA_HOST}/api/tags" >/dev/null; do
-  echo "Waiting for Ollama at ${OLLAMA_HOST}..."
-  sleep 1
-done
-
 if [[ "${PORT_HEALTH}" != "${PORT}" ]]; then
-  uvicorn handler:health_app --host 0.0.0.0 --port "${PORT_HEALTH}" &
+  echo "Starting health server on port ${PORT_HEALTH}..."
+  python -m uvicorn handler:health_app --host 0.0.0.0 --port "${PORT_HEALTH}" &
+  HEALTH_PID=$!
 fi
 
-uvicorn handler:app --host 0.0.0.0 --port "${PORT}"
+echo "Starting API server on port ${PORT}..."
+python -m uvicorn handler:app --host 0.0.0.0 --port "${PORT}"
