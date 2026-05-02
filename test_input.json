@@ -1,0 +1,14 @@
+{
+  "input": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Write a short greeting in Spanish."
+      }
+    ],
+    "options": {
+      "temperature": 0.7,
+      "num_predict": 256
+    }
+  }
+}
