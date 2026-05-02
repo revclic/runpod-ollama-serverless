@@ -1,14 +1,15 @@
 {
-  "input": {
-    "messages": [
-      {
-        "role": "user",
-        "content": "Write a short greeting in Spanish."
-      }
-    ],
-    "options": {
-      "temperature": 0.7,
-      "num_predict": 256
+  "model": "aya-expanse:8b",
+  "stream": false,
+  "keep_alive": -1,
+  "messages": [
+    {
+      "role": "user",
+      "content": "Write a short greeting in Spanish."
     }
+  ],
+  "options": {
+    "temperature": 0.7,
+    "num_predict": 256
   }
 }
